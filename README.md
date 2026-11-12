@@ -20,6 +20,19 @@ Cálculos automáticos: IMC, % de gordura (densidade + Siri), massa gorda/magra,
 PA média e classificação (Diretriz Brasileira 2020), PAM, FC máx. estimada (Tanaka), classificação de SpO₂.
 “Imprimir relatório” gera o PDF do painel pelo navegador.
 
+## Instalar no notebook (5 minutos)
+
+1. **Python**: instale em python.org/downloads. No Windows, marque **“Add Python to PATH”**.
+2. **Git for Windows** (git-scm.com), só no Windows: necessário para usar o celular com a câmera guiada.
+3. **Baixe o projeto**: GitHub → `claude_avaliacao` → **Code → Download ZIP** → descompacte em `Documentos\avaliacao`
+   (ou `git clone`).
+4. **Dois cliques** em `iniciar-windows.bat` (Windows) ou `iniciar-mac.command` (Mac; na 1ª vez: botão direito → Abrir).
+   Escolha **1** (só notebook) ou **2** (notebook + celular). O navegador abre sozinho.
+5. **Claude Code**: instale o app do Claude (claude.ai/download), abra a aba **Code** e selecione a pasta do projeto.
+   Pronto: `/feedback nome-do-aluno` e `/importar nome-do-aluno` funcionam.
+
+Os dados ficam em `clientes/` dentro dessa pasta. **Faça backup** (⭳ Baixar backup) toda semana num pendrive ou drive.
+
 ## Duas formas de usar
 
 - **Local** (seu computador, grátis, integração direta com o Claude Code) — veja abaixo.

@@ -865,6 +865,20 @@ def ip_local():
         sk.close()
 
 
+def achar_openssl():
+    """openssl no PATH ou, no Windows, o que vem junto com o Git for Windows."""
+    achado = shutil.which("openssl")
+    if achado:
+        return achado
+    for base in (os.environ.get("ProgramFiles", r"C:\Program Files"), os.environ.get("ProgramFiles(x86)", ""),
+                 os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs")):
+        for sub in (r"Git\usr\bin\openssl.exe", r"Git\mingw64\bin\openssl.exe"):
+            c = os.path.join(base, sub)
+            if base and os.path.isfile(c):
+                return c
+    return None
+
+
 def preparar_certificado(ip: str):
     """Certificado autoassinado em .certificado/ (o celular só libera a câmera ao vivo em HTTPS)."""
     import subprocess
@@ -873,11 +887,13 @@ def preparar_certificado(ip: str):
     marca = pasta / "ip.txt"
     if cert.exists() and chave.exists() and marca.exists() and marca.read_text().strip() == ip:
         return cert, chave
-    if not shutil.which("openssl"):
-        sys.exit("Para --https é preciso o 'openssl' instalado (no Windows ele vem com o Git for Windows),\n"
-                 f"ou coloque um certificado próprio em {cert} e {chave}.")
+    openssl = achar_openssl()
+    if not openssl:
+        sys.exit("Para usar o celular (--https) é preciso o 'openssl'. No Windows, instale o Git for Windows\n"
+                 "(git-scm.com) e rode de novo. Ou coloque um certificado próprio em\n"
+                 f"{cert} e {chave}.")
     pasta.mkdir(exist_ok=True)
-    subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-sha256", "-days", "825",
+    subprocess.run([openssl, "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-sha256", "-days", "825",
                     "-keyout", str(chave), "-out", str(cert), "-subj", "/CN=avaliacao-fisica-local",
                     "-addext", f"subjectAltName=DNS:localhost,IP:127.0.0.1,IP:{ip}"],
                    check=True, capture_output=True)
@@ -892,6 +908,7 @@ def main():
     ap.add_argument("--https", action="store_true",
                     help="HTTPS com certificado local (necessário para a câmera guiada no celular)")
     ap.add_argument("--senha", help="exige login com esta senha (usuário: AVALIACAO_USUARIO ou 'admin')")
+    ap.add_argument("--abrir", action="store_true", help="abre o navegador quando o servidor estiver pronto")
     a = ap.parse_args()
     global SENHA
     if a.senha:
@@ -931,6 +948,10 @@ def main():
             print("  Dica: use também --https para liberar a câmera guiada (silhueta) no celular.")
     print(f"Dados em: {CLIENTES}")
     print(f"Login: {'ATIVO (usuário ' + USUARIO + ')' if auth_ativo() else 'desligado (só use assim no seu computador/Wi-Fi de confiança)'}")
+    if a.abrir:
+        import webbrowser
+        threading.Timer(1.0, lambda: webbrowser.open(f"{esquema}://localhost:{a.porta}")).start()
+    print("Para desligar: feche esta janela ou aperte Ctrl+C.")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
