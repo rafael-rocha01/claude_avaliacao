@@ -190,3 +190,9 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   .so-impressao { display: block; }
   .graficos { grid-template-columns: repeat(3, 1fr); }
 }
+
+/* importar PDF */
+.zona-pdf { border: 2px dashed var(--borda); border-radius: var(--raio); padding: 26px; text-align: center; display: grid; gap: 8px; justify-items: center; background: var(--bg); }
+.zona-pdf.sobre { border-color: var(--pri); background: var(--pri-claro); }
+.lista-reg .item a { text-decoration: none; }
+.aviso a { color: inherit; }

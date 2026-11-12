@@ -138,6 +138,7 @@ function renderLista() {
 async function abrirAluno(slug, aba) {
   S.slug = slug; S.rascunho = null; S.acomp = null;
   S.d = await api('GET', 'clientes/' + slug);
+  await completarResultados();
   if (aba) S.aba = aba;
   history.replaceState(null, '', '#' + slug + '/' + S.aba);
   renderLista(); renderAluno();
@@ -145,7 +146,15 @@ async function abrirAluno(slug, aba) {
 }
 async function recarregar() {
   S.d = await api('GET', 'clientes/' + S.slug);
+  await completarResultados();
   carregarAlunos();
+}
+/* avaliações escritas pelo Claude (importadas de PDF) chegam sem "resultados": calcula e grava */
+async function completarResultados() {
+  for (const a of S.d.avaliacoes.filter(a => !a.resultados)) {
+    a.resultados = Calc.resultados(a, S.d.cliente);
+    try { await api('PUT', `clientes/${S.slug}/avaliacoes/${a.id}`, a); } catch { /* segue */ }
+  }
 }
 function dlgAluno(c) {
   const dlg = $('#dlgAluno'), f = $('#formAluno');
@@ -167,7 +176,7 @@ function dlgAluno(c) {
 
 // ------------------------------------------------------------ tela do aluno
 const ABAS = [['painel', 'Painel'], ['anamnese', 'Anamnese inicial'], ['avaliacoes', 'Avaliações'],
-  ['acompanhamento', 'Acompanhamento'], ['evolucao', 'Evolução'], ['fotos', 'Fotos'], ['feedback', 'Feedback Claude']];
+  ['importar', 'Importar PDF'], ['acompanhamento', 'Acompanhamento'], ['evolucao', 'Evolução'], ['fotos', 'Fotos'], ['feedback', 'Feedback Claude']];
 
 function avaliacoesOrd() { return [...S.d.avaliacoes].sort((a, b) => a.id.localeCompare(b.id)); }
 function acompOrd() { return [...S.d.acompanhamentos].sort((a, b) => a.id.localeCompare(b.id)); }
@@ -188,7 +197,7 @@ function renderAluno() {
         <button id="btnExcluirAluno" class="perigo">Excluir</button>
       </div>
     </div>
-    <nav class="abas">${ABAS.map(([k, r]) => `<button data-aba="${k}" class="${S.aba === k ? 'ativa' : ''}">${r}${k === 'feedback' && pend ? ` <span class="selo">${pend}</span>` : ''}</button>`).join('')}</nav>
+    <nav class="abas">${ABAS.map(([k, r]) => `<button data-aba="${k}" class="${S.aba === k ? 'ativa' : ''}">${r}${k === 'feedback' && pend ? ` <span class="selo">${pend}</span>` : ''}${k === 'avaliacoes' && S.d.avaliacoes.some(a => a.revisar) ? ' <span class="selo">revisar</span>' : ''}${k === 'importar' && (S.d.importacoes || []).some(i => i.pendente && !i.avaliacao) ? ' <span class="selo">na fila</span>' : ''}</button>`).join('')}</nav>
     <div id="conteudo"></div>`;
   $('#btnEditarAluno').onclick = () => dlgAluno(c);
   $('#btnImprimir').onclick = () => { S.aba = 'painel'; renderAluno(); setTimeout(() => window.print(), 200); };
@@ -202,7 +211,7 @@ function renderAluno() {
     S.rascunho = null; S.acomp = null; S.aba = b.dataset.aba;
     history.replaceState(null, '', '#' + S.slug + '/' + S.aba); renderAluno();
   });
-  ({ painel: abaPainel, anamnese: abaAnamnese, avaliacoes: abaAvaliacoes, acompanhamento: abaAcomp,
+  ({ painel: abaPainel, anamnese: abaAnamnese, avaliacoes: abaAvaliacoes, acompanhamento: abaAcomp, importar: abaImportar,
      evolucao: abaEvolucao, fotos: abaFotos, feedback: abaFeedback })[S.aba]($('#conteudo'));
 }
 
@@ -210,6 +219,8 @@ function renderAluno() {
 function alertas() {
   const out = [], an = S.d.anamnese || {}, avs = avaliacoesOrd(), ult = avs.at(-1), acs = acompOrd(), ua = acs.at(-1);
   if (!an.atualizado_em) out.push(['', 'Anamnese inicial ainda não preenchida.']);
+  const rev = avs.filter(a => a.revisar).map(a => fmtData(a.data));
+  if (rev.length) out.push(['', `Avaliação importada de PDF aguardando sua revisão: ${rev.join(', ')} (aba Avaliações).`]);
   const sim = Object.values(an.parq || {}).filter(v => v === 'sim').length;
   if (sim) out.push(['perigo', `PAR-Q com ${sim} resposta(s) SIM — solicitar liberação médica antes de esforço intenso.`]);
   if (ult?.resultados?.pa_sis >= 140 || ult?.resultados?.pa_dia >= 90) out.push(['perigo', `PA média ${ult.resultados.pa_media} mmHg na última avaliação (${ult.resultados.pa_classe}). Reavaliar e orientar acompanhamento médico.`]);
@@ -334,6 +345,7 @@ function abaAvaliacoes(el) {
       ${avs.length ? '<button id="btnDuplicar">Nova a partir da última (copiar protocolo)</button>' : ''}</div>
     <div class="lista-reg">${avs.map(a => `
       <div class="item"><div class="info"><b>${fmtData(a.data)}</b>
+        ${a.origem ? `<span class="selo ${a.revisar ? '' : 'neutro'}">${a.revisar ? 'importada do PDF — revisar' : 'importada do PDF'}</span>` : ''}
         <small>Peso ${fmt(a.peso)} kg · %G ${fmt(a.resultados?.percentual_gordura)} · PA ${fmt(a.resultados?.pa_media)} · SpO₂ ${fmt(a.sinais?.spo2)}% · ${Object.keys(a.fotos || {}).length} foto(s)</small></div>
         <button data-ed="${a.id}">Abrir / editar</button><button class="perigo" data-del="${a.id}">Excluir</button></div>`).join('')
       || '<p class="dica">Nenhuma avaliação registrada.</p>'}</div>`;
@@ -374,6 +386,11 @@ function editorAvaliacao(el) {
           ${Object.entries(Calc.PROTOCOLOS).map(([k, p]) => `<option value="${k}">${p.nome}</option>`).join('')}<option value="">Sem protocolo (só registrar)</option></select></label>
       </div>
     </div>
+    ${A.origem ? `<div class="aviso">Importada de <a href="/clientes/${S.slug}/${esc(A.origem.arquivo)}" target="_blank">${esc(A.origem.arquivo)}</a>.
+      Confira os campos com o PDF aberto ao lado e clique em <b>Salvar avaliação</b> para marcar como revisada.
+      ${A.campos_nao_mapeados ? `<br><b>Itens do PDF sem campo no sistema:</b> ${esc(A.campos_nao_mapeados)}` : ''}</div>` : ''}
+    ${A.nutrio && Object.keys(A.nutrio).length ? `<div class="card"><h3>Valores calculados pelo Nutrio <small>para comparar com o cálculo do sistema</small></h3>
+      <div class="resultados">${Object.entries(A.nutrio).map(([k, v]) => `<div><span>${esc(k.replace(/_/g, ' '))}</span><b>${fmt(v, k === 'densidade' ? 4 : 2)}</b></div>`).join('')}</div></div>` : ''}
     <div class="card"><h3>Resultados <small>calculados em tempo real</small></h3><div id="resultadosAv"></div></div>
     <div class="card"><h3>Circunferências <small>cm · fita inextensível</small></h3>
       <div class="grade g6">${CIRC.map(([k, r]) => campoNum('circunferencias.' + k, r)).join('')}</div></div>
@@ -421,11 +438,11 @@ function editorAvaliacao(el) {
   atualizar();
   renderSlotsFoto();
   $('#cancAv').onclick = () => { if (A._sujo && !confirm('Descartar alterações?')) return; S.rascunho = null; renderAluno(); };
-  $('#salvarAv').onclick = () => salvarAvaliacao();
-  $('#salvarFb').onclick = async () => { if (await salvarAvaliacao(true)) { S.aba = 'feedback'; renderAluno(); $('#tipoPedido').value = 'avaliacao'; $('#refPedido').value = A.id; } };
+  $('#salvarAv').onclick = () => { A.revisar = false; salvarAvaliacao(); };
+  $('#salvarFb').onclick = async () => { A.revisar = false; if (await salvarAvaliacao(true)) { S.aba = 'feedback'; renderAluno(); $('#tipoPedido').value = 'avaliacao'; $('#refPedido').value = A.id; } };
 }
 function painelResultados(R) {
-  const it = (r, v, sub = '') => `<div><span>${r}</span><b>${fmt(v, 2)}</b>${sub ? `<span>${esc(sub)}</span>` : ''}</div>`;
+  const it = (r, v, sub = '') => `<div><span>${r}</span><b>${fmt(v, /Densidade/.test(r) ? 4 : 2)}</b>${sub ? `<span>${esc(sub)}</span>` : ''}</div>`;
   let h = `<div class="resultados">
     ${it('Idade na avaliação', R.idade)}${it('IMC (kg/m²)', R.imc, R.imc_classe)}
     ${it('% Gordura', R.percentual_gordura, R.gordura_classe)}${it('Densidade corporal', R.densidade)}
@@ -547,6 +564,67 @@ function abaFotos(el) {
     verFotos(lista, (POSICOES_FOTO.find(x => x[0] === pos) || [])[1]);
   };
   $$('img[data-src]', el).forEach(i => i.onclick = () => verFotos([{ src: i.dataset.src, legenda: i.dataset.leg }], i.dataset.leg));
+}
+
+// ------------------------------------------------------------ importar PDF
+function abaImportar(el) {
+  const st = S.status, apiOk = st.sdk && st.chave, imps = S.d.importacoes || [];
+  const cmd = `/importar ${S.slug}`;
+  el.innerHTML = `
+    <div class="card"><h3>Importar avaliação em PDF <small>Nutrio ou outro sistema</small></h3>
+      <div id="zonaPdf" class="zona-pdf">
+        <b>Arraste o PDF aqui</b> ou <button type="button" id="btnEscolherPdf" class="primario">Escolher PDF</button>
+        <div class="dica">Pode enviar vários de uma vez (avaliações antigas também — cada uma vira uma data no histórico).</div>
+      </div>
+      <label style="margin-top:10px">Observação para o Claude (opcional)<input id="obsPdf" placeholder="Ex.: o Nutrio usou Pollock 7; a data correta é 03/10"></label>
+      <p class="dica">O PDF fica em <code>clientes/${esc(S.slug)}/importacoes/</code> e entra na fila. No Claude Code, digite:</p>
+      <div class="comando"><span>${esc(cmd)}</span><button id="btnCopiarImp">Copiar</button></div>
+      <p class="dica">O Claude lê o PDF e grava a avaliação no formato do sistema (medidas, dobras, protocolo, sinais vitais, postura, observações).
+        Ela aparece em <b>Avaliações</b> marcada “revisar”, e os valores calculados pelo Nutrio ficam guardados para comparar.</p>
+    </div>
+    <div class="barra-acoes" style="justify-content:flex-start"><button id="btnAtualizarImp">↻ Atualizar</button></div>
+    <div class="lista-reg">${imps.map(i => `<div class="item"><div class="info">
+        <b>${esc(i.arquivo)}</b>
+        <small>${fmtData(i.enviado)} · ${i.tamanho_kb} KB ·
+          ${i.avaliacao ? `<span class="selo ok">convertido → avaliação ${fmtData(i.avaliacao)}</span>` : i.pendente ? '<span class="selo">aguardando o Claude</span>' : '<span class="selo neutro">sem pedido</span>'}</small></div>
+        <a href="/clientes/${S.slug}/${esc(i.caminho)}" target="_blank"><button type="button">Ver PDF</button></a>
+        ${i.avaliacao ? `<button data-abrir="${esc(i.avaliacao)}">Abrir avaliação</button>` : apiOk ? `<button data-conv="${esc(i.arquivo)}">Converter agora (API)</button>` : ''}
+        <button class="perigo" data-delimp="${esc(i.arquivo)}">Excluir</button></div>`).join('') || '<p class="dica">Nenhum PDF importado.</p>'}</div>`;
+  const enviar = async arquivos => {
+    const pdfs = [...arquivos].filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name));
+    if (!pdfs.length) return toast('Selecione um arquivo PDF');
+    for (const f of pdfs) {
+      if (f.size > 30 * 1024 * 1024) { toast(f.name + ' passa de 30 MB'); continue; }
+      try {
+        toast('Enviando ' + f.name + '…');
+        const b64 = await new Promise((ok, erro) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = erro; r.readAsDataURL(f); });
+        await api('POST', `clientes/${S.slug}/importacoes`, { nome: f.name, base64: b64, instrucao: $('#obsPdf').value.trim() });
+      } catch (e) { toast('Erro: ' + e.message); }
+    }
+    await recarregar(); renderAluno(); toast(`PDF na fila. No Claude Code: ${cmd}`, 5000);
+  };
+  $('#btnEscolherPdf').onclick = () => {
+    const i = document.createElement('input'); i.type = 'file'; i.accept = 'application/pdf,.pdf'; i.multiple = true;
+    i.onchange = () => enviar(i.files); i.click();
+  };
+  const z = $('#zonaPdf');
+  z.ondragover = e => { e.preventDefault(); z.classList.add('sobre'); };
+  z.ondragleave = () => z.classList.remove('sobre');
+  z.ondrop = e => { e.preventDefault(); z.classList.remove('sobre'); enviar(e.dataTransfer.files); };
+  $('#btnCopiarImp').onclick = () => navigator.clipboard?.writeText(cmd).then(() => toast('Comando copiado'));
+  $('#btnAtualizarImp').onclick = async () => { await recarregar(); renderAluno(); };
+  $$('[data-abrir]', el).forEach(b => b.onclick = () => { S.rascunho = clone(S.d.avaliacoes.find(a => a.id === b.dataset.abrir)); S.aba = 'avaliacoes'; renderAluno(); });
+  $$('[data-delimp]', el).forEach(b => b.onclick = async () => {
+    if (!confirm('Excluir este PDF? (a avaliação já convertida, se houver, continua)')) return;
+    await api('DELETE', `clientes/${S.slug}/importacoes/${b.dataset.delimp}`); await recarregar(); renderAluno();
+  });
+  $$('[data-conv]', el).forEach(b => b.onclick = async () => {
+    b.disabled = true; b.textContent = 'Claude lendo o PDF…';
+    try {
+      const r = await api('POST', `clientes/${S.slug}/importacoes/${b.dataset.conv}/converter`); await recarregar();
+      S.rascunho = clone(S.d.avaliacoes.find(a => a.id === r.avaliacao)); S.aba = 'avaliacoes'; renderAluno(); toast('Convertido — revise os campos');
+    } catch (e) { toast('Erro: ' + e.message, 6000); b.disabled = false; b.textContent = 'Converter agora (API)'; }
+  });
 }
 
 // ------------------------------------------------------------ acompanhamento
@@ -744,9 +822,10 @@ window.addEventListener('beforeunload', e => { if (S.rascunho?._sujo || S.acomp?
 // recarrega feedbacks quando a janela volta ao foco (o Claude pode ter escrito algo)
 window.addEventListener('focus', async () => {
   if (!S.slug || S.rascunho || S.acomp) return;
-  const antes = S.d.feedbacks.length + ':' + S.d.pedidos.length;
+  const sig = () => S.d.feedbacks.length + ':' + S.d.pedidos.length + ':' + S.d.avaliacoes.length;
+  const antes = sig();
   await recarregar();
-  if (S.d.feedbacks.length + ':' + S.d.pedidos.length !== antes) { renderAluno(); toast('Novo feedback do Claude disponível'); }
+  if (sig() !== antes) { renderAluno(); toast('O Claude atualizou a pasta do aluno'); }
 });
 
 (async () => {

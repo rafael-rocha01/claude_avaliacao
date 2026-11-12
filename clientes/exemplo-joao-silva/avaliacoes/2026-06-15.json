@@ -1,0 +1,89 @@
+{
+  "id": "2026-06-15",
+  "data": "2026-06-15",
+  "peso": 95,
+  "altura": 178,
+  "protocolo": "jp7",
+  "circunferencias": {
+    "pescoco": 41,
+    "torax": 106,
+    "cintura": 99.5,
+    "abdomen": 104,
+    "quadril": 108,
+    "braco_rel_d": 33.5,
+    "braco_con_d": 35,
+    "antebraco_d": 29,
+    "coxa_med_d": 59,
+    "panturrilha_d": 38.5
+  },
+  "dobras": {
+    "triceps": 16,
+    "subescapular": 24,
+    "peitoral": 20,
+    "axilar_media": 22,
+    "suprailiaca": 28,
+    "abdominal": 34,
+    "coxa": 20,
+    "biceps": 8
+  },
+  "sinais": {
+    "pa": [
+      {
+        "sis": 142,
+        "dia": 92
+      }
+    ],
+    "fc_repouso": 82,
+    "obs": "Valores do Nutrio (uma leitura de PA, braço e posição não informados)."
+  },
+  "postural": {
+    "itens": {
+      "Ombros protrusos": "leve"
+    },
+    "obs": "Do PDF: \"Ombros protrusos visíveis\" (grau não informado; marcado como leve para revisão)."
+  },
+  "fotos": {},
+  "observacoes": "Importada do Nutrio. Relato: dor lombar ao final do dia.",
+  "nutrio": {
+    "protocolo": "Pollock 7 dobras",
+    "densidade": 1.0441,
+    "percentual_gordura": 24.1,
+    "massa_gorda": 22.9,
+    "massa_magra": 72.1,
+    "imc": 30,
+    "tmb_harris_benedict": 1985
+  },
+  "campos_nao_mapeados": "Coxa distal direita 44,0 cm; diâmetro do fêmur 10,0 cm; TMB 1985 kcal (guardada em nutrio).",
+  "origem": {
+    "tipo": "nutrio-pdf",
+    "arquivo": "importacoes/2026-11-12-110839-avaliacao-nutrio-joao-15-06.pdf",
+    "via": "claude-code",
+    "convertido_em": "2026-11-12T11:10:00"
+  },
+  "revisar": true,
+  "resultados": {
+    "idade": 36,
+    "imc": 30,
+    "imc_classe": "Obesidade grau I",
+    "rcq": 0.92,
+    "rcq_risco": "Risco elevado",
+    "rce": 0.56,
+    "rce_risco": "Risco elevado (≥0,50)",
+    "soma_todas_dobras": 172,
+    "protocolo_nome": "Jackson & Pollock 7 dobras",
+    "soma_dobras": 164,
+    "densidade": 1.0451,
+    "percentual_gordura": 23.6,
+    "gordura_classe": "Média",
+    "massa_gorda": 22.5,
+    "massa_magra": 72.5,
+    "pa_sis": 142,
+    "pa_dia": 92,
+    "pa_media": "142/92",
+    "pa_classe": "Hipertensão estágio 1",
+    "pam": 109,
+    "fc_classe": "Normal",
+    "fc_max_estimada": 183
+  },
+  "atualizado_em": "2026-11-12T11:08:59"
+}

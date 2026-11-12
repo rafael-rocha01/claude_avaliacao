@@ -7,6 +7,8 @@ Aluno(s): $ARGUMENTS
 
 Siga o fluxo de feedback descrito no `CLAUDE.md` do projeto:
 
+0. Se houver pedidos `Tipo: importar-pdf` pendentes para o aluno, converta-os primeiro (seção
+   "Importar PDF do Nutrio" do CLAUDE.md), para o feedback já considerar essas avaliações.
 1. Se não vier slug, liste `clientes/*/pedidos/*.md` e atenda **todos** os pedidos pendentes.
 2. Para cada aluno: leia `clientes/<slug>/RESUMO.md`, os pedidos em `pedidos/`, os JSON das
    avaliações/acompanhamentos referenciados e, se o pedido envolver postura ou fotos, abra as

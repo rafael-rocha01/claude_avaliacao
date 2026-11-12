@@ -10,6 +10,7 @@ pela pasta de cada aluno.
 | **Painel** | Últimos indicadores com variação em relação à avaliação anterior, gráficos, alertas (PAR-Q, PA, SpO₂, dor, reavaliação atrasada) |
 | **Anamnese inicial** | Histórico de saúde, medicamentos, lesões, hábitos, objetivos e PAR-Q |
 | **Avaliações** | Peso/estatura · 18 circunferências · 10 dobras · protocolos JP7, JP3, Durnin-Womersley e Faulkner · PA (3 leituras + média) · FC · **oxímetro (SpO₂, FC, PI)** · 4 fotos + extras (câmera do celular) · **checklist postural** (anterior, lateral, posterior, com graus) |
+| **Importar PDF** | Anexa o PDF de avaliação do **Nutrio** (ou outro sistema). O Claude converte para o formato do sistema; a avaliação entra no histórico marcada “revisar”, com os valores do Nutrio guardados para comparação |
 | **Acompanhamento** | Anamnese de acompanhamento a cada encontro: escalas 0–10 (energia, sono, estresse, dor EVA, fome, recuperação), adesão a treino/dieta, sinais rápidos, relato e metas |
 | **Evolução** | Tabela comparativa de todas as avaliações com Δ, e gráficos |
 | **Fotos** | Antes × depois lado a lado com **grade postural e linha de prumo** (clique move o prumo; Shift+clique cria uma linha horizontal) |
@@ -41,13 +42,20 @@ sozinha). O `CLAUDE.md` deste repositório ensina o Claude a ler essa pasta.
 
 Também dá para conversar livremente: *“compare as fotos de lateral do João de agosto e novembro”*.
 
-**Opção 2: botão “Gerar agora” (API)**
+**Importar PDF do Nutrio**
+1. Aba *Importar PDF* → arraste o(s) PDF(s) (pode ser avaliação antiga: vira uma data no histórico).
+2. No Claude Code: `/importar nome-do-aluno` (ou `/importar` para todos os pendentes).
+3. A avaliação aparece em *Avaliações* com o selo **revisar**. Abra, confira com o PDF (o link fica no topo) e clique em **Salvar avaliação**.
+   O sistema recalcula %G, IMC, RCQ etc. e mostra ao lado o que o Nutrio havia calculado. Medidas sem campo no sistema
+   (ex.: diâmetros ósseos, bioimpedância) ficam listadas em “Itens do PDF sem campo no sistema”.
+
+**Opção 2: botão “Gerar agora” / “Converter agora” (API)**
 ```bash
 pip install anthropic
 export ANTHROPIC_API_KEY=sk-ant-...
 python3 servidor.py
 ```
-O botão aparece na aba de feedback; usa o modelo `claude-opus-5-5` e envia o resumo e as fotos da última avaliação.
+Os botões aparecem nas abas de feedback e de importação; usa o modelo `claude-opus-5-5` e envia o resumo e as fotos da última avaliação.
 
 ## Privacidade (LGPD)
 
@@ -62,6 +70,6 @@ servidor.py              servidor HTTP + gravação em disco + RESUMO.md + chama
 web/                     interface (HTML/CSS/JS puro)
   calculos.js            fórmulas e classificações
 CLAUDE.md                instruções para o Claude (estrutura, formato do feedback, limites)
-.claude/commands/feedback.md   comando /feedback
-clientes/<slug>/         cliente.json, anamnese.json, avaliacoes/, acompanhamentos/, fotos/, pedidos/, feedback/, RESUMO.md
+.claude/commands/        comandos /feedback e /importar
+clientes/<slug>/         cliente.json, anamnese.json, avaliacoes/, importacoes/, acompanhamentos/, fotos/, pedidos/, feedback/, RESUMO.md
 ```

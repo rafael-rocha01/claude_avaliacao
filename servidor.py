@@ -92,6 +92,25 @@ def listar_pedidos(pasta: Path):
     return [{"arquivo": f.name, "conteudo": f.read_text(encoding="utf-8")} for f in sorted(pd.glob("*.md"))]
 
 
+def listar_importacoes(pasta: Path):
+    imp = pasta / "importacoes"
+    if not imp.exists():
+        return []
+    convertidos = {}
+    for a in listar_json(pasta / "avaliacoes"):
+        arq = (a.get("origem") or {}).get("arquivo")
+        if arq:
+            convertidos[arq] = a.get("id")
+    pendentes = " ".join(f.read_text(encoding="utf-8") for f in (pasta / "pedidos").glob("*.md")) if (pasta / "pedidos").exists() else ""
+    out = []
+    for f in sorted(imp.glob("*.pdf"), reverse=True):
+        rel = f"importacoes/{f.name}"
+        out.append({"arquivo": f.name, "caminho": rel, "tamanho_kb": round(f.stat().st_size / 1024),
+                    "enviado": dt.datetime.fromtimestamp(f.stat().st_mtime).isoformat(timespec="minutes"),
+                    "avaliacao": convertidos.get(rel), "pendente": f.name in pendentes})
+    return out
+
+
 def dados_completos(slug: str):
     p = pasta_cliente(slug)
     if not (p / "cliente.json").exists():
@@ -103,6 +122,7 @@ def dados_completos(slug: str):
         "acompanhamentos": listar_json(p / "acompanhamentos"),
         "feedbacks": listar_feedbacks(p),
         "pedidos": listar_pedidos(p),
+        "importacoes": listar_importacoes(p),
     }
 
 
@@ -193,6 +213,12 @@ def gerar_resumo(slug: str):
         L.append("")
         for x in av:
             L.append(f"### Avaliação {x['id']}")
+            if x.get("origem"):
+                o = x["origem"]
+                L.append(f"- Importada de {o.get('tipo', 'PDF')}: {o.get('arquivo', '')}"
+                         + (" — **aguardando revisão do avaliador**" if x.get("revisar") else " — revisada"))
+            if x.get("nutrio"):
+                L.append("- Valores informados no PDF: " + ", ".join(f"{k}={v}" for k, v in x["nutrio"].items()))
             s = x.get("sinais") or {}
             if s.get("obs"):
                 L.append(f"- Sinais vitais — obs: {s['obs']}")
@@ -226,35 +252,19 @@ def gerar_resumo(slug: str):
     if d["feedbacks"]:
         L += ["## Feedbacks já escritos", ""] + [f"- feedback/{f['arquivo']}" for f in d["feedbacks"]] + [""]
     if d["pedidos"]:
-        L += ["## ⚠️ Pedidos de feedback pendentes", ""] + [f"- pedidos/{f['arquivo']}" for f in d["pedidos"]] + [""]
+        L += ["## ⚠️ Pedidos pendentes (feedback / importação de PDF)", ""] + [f"- pedidos/{f['arquivo']}" for f in d["pedidos"]] + [""]
     (pasta_cliente(slug) / "RESUMO.md").write_text("\n".join(L), encoding="utf-8")
 
 
-# ------------------------------------------------------ feedback via API
-def gerar_feedback_api(slug: str, instrucao: str):
+# ------------------------------------------------------ chamadas à API (opcionais)
+def _chamar_claude(conteudo):
+    """Envia o conteúdo ao Claude com o CLAUDE.md como instrução. Retorna (texto, erro)."""
     try:
         import anthropic
     except ImportError:
         return None, ("Pacote 'anthropic' não instalado. Rode: pip install anthropic  "
-                      "— ou use 'Pedir ao Claude Code' (sem custo de API).")
-    p = pasta_cliente(slug)
-    gerar_resumo(slug)
-    resumo = (p / "RESUMO.md").read_text(encoding="utf-8")
+                      "— ou use o Claude Code pela pasta do aluno (sem custo de API).")
     guia = (RAIZ / "CLAUDE.md").read_text(encoding="utf-8") if (RAIZ / "CLAUDE.md").exists() else ""
-    conteudo = []
-    # fotos da última avaliação, para leitura postural
-    av = sorted(listar_json(p / "avaliacoes"), key=lambda x: x.get("id", ""))
-    if av:
-        for pos, rel in (av[-1].get("fotos") or {}).items():
-            f = (p / rel).resolve()
-            if f.is_file() and str(f).startswith(str(p.resolve())):
-                conteudo.append({"type": "text", "text": f"Foto da última avaliação — {pos}:"})
-                conteudo.append({"type": "image", "source": {
-                    "type": "base64", "media_type": "image/jpeg",
-                    "data": base64.standard_b64encode(f.read_bytes()).decode()}})
-    conteudo.append({"type": "text", "text":
-                     f"{resumo}\n\n---\nPedido do avaliador: {instrucao or 'Feedback completo do momento atual.'}\n\n"
-                     "Escreva o feedback em Markdown seguindo o formato definido nas instruções."})
     try:
         client = anthropic.Anthropic()
         with client.beta.messages.stream(
@@ -278,15 +288,86 @@ def gerar_feedback_api(slug: str, instrucao: str):
     except anthropic.APIConnectionError:
         return None, "Sem conexão com a API da Anthropic."
     if msg.stop_reason == "refusal":
-        return None, "O modelo recusou o pedido. Reformule a instrução."
+        return None, "O modelo recusou o pedido."
     texto = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text").strip()
-    if not texto:
-        return None, "Resposta vazia."
+    return (texto, None) if texto else (None, "Resposta vazia.")
+
+
+def gerar_feedback_api(slug: str, instrucao: str):
+    p = pasta_cliente(slug)
+    gerar_resumo(slug)
+    resumo = (p / "RESUMO.md").read_text(encoding="utf-8")
+    conteudo = []
+    # fotos da última avaliação, para leitura postural
+    av = sorted(listar_json(p / "avaliacoes"), key=lambda x: x.get("id", ""))
+    if av:
+        for pos, rel in (av[-1].get("fotos") or {}).items():
+            f = (p / rel).resolve()
+            if f.is_file() and str(f).startswith(str(p.resolve())):
+                conteudo.append({"type": "text", "text": f"Foto da última avaliação — {pos}:"})
+                conteudo.append({"type": "image", "source": {
+                    "type": "base64", "media_type": "image/jpeg",
+                    "data": base64.standard_b64encode(f.read_bytes()).decode()}})
+    conteudo.append({"type": "text", "text":
+                     f"{resumo}\n\n---\nPedido do avaliador: {instrucao or 'Feedback completo do momento atual.'}\n\n"
+                     "Escreva o feedback em Markdown seguindo o formato definido nas instruções."})
+    texto, erro = _chamar_claude(conteudo)
+    if erro:
+        return None, erro
     nome = f"{dt.date.today().isoformat()}-api-{dt.datetime.now().strftime('%H%M%S')}.md"
     (p / "feedback").mkdir(exist_ok=True)
     (p / "feedback" / nome).write_text(texto + "\n", encoding="utf-8")
     gerar_resumo(slug)
     return nome, None
+
+
+def _extrair_json(texto: str):
+    m = re.search(r"```(?:json)?\s*(\{.*\})\s*```", texto, re.S) or re.search(r"(\{.*\})", texto, re.S)
+    if not m:
+        raise ValueError("a resposta não trouxe JSON")
+    return json.loads(m.group(1))
+
+
+def converter_pdf_api(slug: str, arquivo: str):
+    """Converte um PDF do Nutrio em avaliacoes/<id>.json usando a API."""
+    p = pasta_cliente(slug)
+    pdf = p / "importacoes" / arquivo
+    if not pdf.is_file():
+        return None, "PDF não encontrado"
+    cliente = ler_json(p / "cliente.json", {})
+    conteudo = [
+        {"type": "document", "source": {"type": "base64", "media_type": "application/pdf",
+                                        "data": base64.standard_b64encode(pdf.read_bytes()).decode()}},
+        {"type": "text", "text": (
+            f"Cadastro do aluno: {json.dumps(cliente, ensure_ascii=False)}\n"
+            f"Arquivo: importacoes/{arquivo}\n\n"
+            "Converta este PDF de avaliação do Nutrio para o formato do sistema, seguindo a seção "
+            "'Importar PDF do Nutrio' das instruções. Responda APENAS com o objeto JSON da avaliação "
+            "dentro de um bloco ```json```.")},
+    ]
+    texto, erro = _chamar_claude(conteudo)
+    if erro:
+        return None, erro
+    try:
+        av = _extrair_json(texto)
+    except (ValueError, json.JSONDecodeError) as e:
+        return None, f"Não consegui ler o JSON da resposta: {e}"
+    data = str(av.get("data") or dt.date.today().isoformat())[:10]
+    if not ID_RE.match(data):
+        data = dt.date.today().isoformat()
+    ident, i = data, 2
+    while (p / "avaliacoes" / f"{ident}.json").exists():
+        ident, i = f"{data}-{i}", i + 1
+    av.update({"id": ident, "data": data, "revisar": True,
+               "origem": {"tipo": "nutrio-pdf", "arquivo": f"importacoes/{arquivo}", "via": "api",
+                          "convertido_em": agora()}})
+    av.pop("resultados", None)
+    gravar_json(p / "avaliacoes" / f"{ident}.json", av)
+    for ped in (p / "pedidos").glob("*.md"):
+        if arquivo in ped.read_text(encoding="utf-8"):
+            ped.unlink()
+    gerar_resumo(slug)
+    return ident, None
 
 
 # ------------------------------------------------------------------- HTTP
@@ -404,7 +485,7 @@ class Handler(SimpleHTTPRequestHandler):
                     slug, i = f"{base}-{i}", i + 1
                 c = {**corpo, "nome": nome, "slug": slug, "criado_em": agora()}
                 gravar_json(CLIENTES / slug / "cliente.json", c)
-                for sub in ("avaliacoes", "acompanhamentos", "fotos", "feedback", "pedidos"):
+                for sub in ("avaliacoes", "acompanhamentos", "fotos", "feedback", "pedidos", "importacoes"):
                     (CLIENTES / slug / sub).mkdir(parents=True, exist_ok=True)
                 gerar_resumo(slug)
                 return self._json(c, 201)
@@ -449,6 +530,40 @@ class Handler(SimpleHTTPRequestHandler):
                 arq.parent.mkdir(parents=True, exist_ok=True)
                 arq.write_bytes(base64.b64decode(b64))
                 return self._json({"caminho": f"fotos/{ident}/{pos}.jpg"})
+            elif resto == ["importacoes"] and metodo == "POST":
+                nome_orig = Path(corpo.get("nome") or "avaliacao.pdf").stem
+                b64 = (corpo.get("base64") or "").split(",")[-1]
+                dados = base64.b64decode(b64)
+                if not dados.startswith(b"%PDF"):
+                    return self._erro("o arquivo não é um PDF")
+                ts = dt.datetime.now().strftime("%Y-%m-%d-%H%M%S")
+                nome = f"{ts}-{slugify(nome_orig)[:40]}.pdf"
+                (pasta / "importacoes").mkdir(exist_ok=True)
+                (pasta / "importacoes" / nome).write_bytes(dados)
+                txt = (f"# Pedido de importação — {ts}\n\n"
+                       f"- Aluno: {slug}\n- Tipo: importar-pdf\n- Arquivo: importacoes/{nome}\n"
+                       f"- Origem: {corpo.get('origem') or 'Nutrio'}\n\n"
+                       f"## O que fazer\n\nConverter o PDF em avaliacoes/<data>.json conforme a seção "
+                       f"'Importar PDF do Nutrio' do CLAUDE.md.\n"
+                       + (f"\nObservação do avaliador: {corpo['instrucao']}\n" if corpo.get("instrucao") else ""))
+                (pasta / "pedidos").mkdir(exist_ok=True)
+                (pasta / "pedidos" / f"{ts}.md").write_text(txt, encoding="utf-8")
+                gerar_resumo(slug)
+                return self._json({"arquivo": nome}, 201)
+            elif len(resto) == 2 and resto[0] == "importacoes" and metodo == "DELETE":
+                if not re.match(r"^[A-Za-z0-9_.-]+\.pdf$", resto[1]):
+                    return self._erro("arquivo inválido")
+                (pasta / "importacoes" / resto[1]).unlink(missing_ok=True)
+                for ped in (pasta / "pedidos").glob("*.md"):
+                    if resto[1] in ped.read_text(encoding="utf-8"):
+                        ped.unlink()
+            elif len(resto) == 3 and resto[0] == "importacoes" and resto[2] == "converter" and metodo == "POST":
+                if not re.match(r"^[A-Za-z0-9_.-]+\.pdf$", resto[1]):
+                    return self._erro("arquivo inválido")
+                ident, erro = converter_pdf_api(slug, resto[1])
+                if erro:
+                    return self._erro(erro, 502)
+                return self._json({"avaliacao": ident})
             elif resto == ["pedidos"] and metodo == "POST":
                 ts = dt.datetime.now().strftime("%Y-%m-%d-%H%M%S")
                 txt = (f"# Pedido de feedback — {ts}\n\n"
