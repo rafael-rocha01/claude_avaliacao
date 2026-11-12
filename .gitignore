@@ -1,0 +1,8 @@
+# Dados dos alunos são dados de saúde (LGPD) — ficam só no seu computador.
+# Remova as duas linhas abaixo apenas se o repositório for PRIVADO e você quiser versionar.
+clientes/*
+!clientes/exemplo-joao-silva/
+.lixeira/
+__pycache__/
+*.tmp
+.DS_Store

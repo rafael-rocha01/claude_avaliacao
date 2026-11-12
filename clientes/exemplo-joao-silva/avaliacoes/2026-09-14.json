@@ -1,0 +1,80 @@
+{
+  "id": "2026-09-14",
+  "data": "2026-09-14",
+  "peso": 89.8,
+  "altura": 178,
+  "protocolo": "jp7",
+  "circunferencias": {
+    "pescoco": 40,
+    "ombro": 118,
+    "torax": 96.7,
+    "cintura": 89.3,
+    "abdomen": 93.9,
+    "quadril": 98.6,
+    "braco_rel_d": 33,
+    "braco_con_d": 38.2,
+    "coxa_med_d": 58,
+    "panturrilha_d": 38
+  },
+  "dobras": {
+    "peitoral": 16.7,
+    "axilar_media": 18.6,
+    "triceps": 14.0,
+    "subescapular": 20.5,
+    "abdominal": 29.8,
+    "suprailiaca": 24.2,
+    "coxa": 17.7
+  },
+  "sinais": {
+    "pa": [
+      {
+        "sis": 130,
+        "dia": 84
+      },
+      {
+        "sis": 126,
+        "dia": 82
+      },
+      {}
+    ],
+    "braco": "esquerdo",
+    "posicao": "sentado",
+    "fc_repouso": 78,
+    "spo2": 98
+  },
+  "postural": {
+    "itens": {
+      "Cabeça anteriorizada": "moderado",
+      "Ombros protrusos": "leve",
+      "Hiperlordose lombar": "leve"
+    },
+    "obs": "Encurtamento de peitoral"
+  },
+  "fotos": {},
+  "atualizado_em": "2026-11-12T10:59:19",
+  "resultados": {
+    "idade": 36,
+    "imc": 28.3,
+    "imc_classe": "Sobrepeso",
+    "rcq": 0.9,
+    "rcq_risco": "Risco elevado",
+    "rce": 0.5,
+    "rce_risco": "Risco elevado (≥0,50)",
+    "soma_todas_dobras": 141.4,
+    "protocolo_nome": "Jackson & Pollock 7 dobras",
+    "soma_dobras": 141.4,
+    "densidade": 1.0511,
+    "percentual_gordura": 20.9,
+    "gordura_classe": "Média",
+    "massa_gorda": 18.8,
+    "massa_magra": 71,
+    "pa_sis": 128,
+    "pa_dia": 83,
+    "pa_media": "128/83",
+    "pa_classe": "Normal",
+    "pam": 98,
+    "spo2_classe": "Normal",
+    "fc_classe": "Normal",
+    "fc_max_estimada": 183
+  }
+}

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Avaliação Física</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topo">
+  <button id="btnMenu" class="icone so-celular" aria-label="Alunos">☰</button>
+  <h1>Avaliação Física <span>antropometria · sinais vitais · postura · acompanhamento</span></h1>
+  <div id="statusClaude" class="status"></div>
+</header>
+
+<div class="layout">
+  <aside id="lateral" class="lateral">
+    <div class="lateral-topo">
+      <input id="busca" type="search" placeholder="Buscar aluno…">
+      <button id="btnNovoAluno" class="primario">+ Novo aluno</button>
+    </div>
+    <ul id="listaAlunos" class="lista-alunos"></ul>
+  </aside>
+
+  <main id="principal" class="principal">
+    <section class="vazio">
+      <h2>Selecione ou cadastre um aluno</h2>
+      <p>Cada aluno ganha uma pasta em <code>clientes/&lt;nome&gt;/</code> com avaliações, fotos, anamneses e feedbacks.
+      O Claude Code lê essa pasta e escreve os feedbacks em <code>feedback/</code>, que aparecem aqui.</p>
+    </section>
+  </main>
+</div>
+
+<dialog id="dlgAluno">
+  <form method="dialog" id="formAluno" class="form">
+    <h2 id="dlgAlunoTitulo">Novo aluno</h2>
+    <div class="grade g2">
+      <label class="col2">Nome completo<input name="nome" required></label>
+      <label>Sexo
+        <select name="sexo" required><option value="">—</option><option value="M">Masculino</option><option value="F">Feminino</option></select>
+      </label>
+      <label>Nascimento<input name="nascimento" type="date" required></label>
+      <label>Altura (cm)<input name="altura" type="number" step="0.1" inputmode="decimal"></label>
+      <label>Telefone<input name="telefone" type="tel"></label>
+      <label class="col2">E-mail<input name="email" type="email"></label>
+      <label class="col2">Objetivo<input name="objetivo" placeholder="Ex.: hipertrofia, emagrecimento, saúde…"></label>
+      <label class="col2">Observações<textarea name="observacoes" rows="2"></textarea></label>
+    </div>
+    <div class="acoes">
+      <button value="cancel" formnovalidate>Cancelar</button>
+      <button value="ok" class="primario">Salvar</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgFoto" class="dlg-foto">
+  <div class="foto-viewer">
+    <div class="foto-barra">
+      <strong id="dlgFotoTitulo"></strong>
+      <label><input type="checkbox" id="chkGrade" checked> Grade postural</label>
+      <label><input type="checkbox" id="chkPrumo" checked> Linha de prumo</label>
+      <button id="btnFecharFoto">Fechar</button>
+    </div>
+    <div id="fotoComparacao" class="foto-comparacao"></div>
+  </div>
+</dialog>
+
+<div id="toast" class="toast" role="status"></div>
+<script src="calculos.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

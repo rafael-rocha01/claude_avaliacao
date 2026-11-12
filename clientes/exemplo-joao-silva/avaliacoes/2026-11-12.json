@@ -1,0 +1,77 @@
+{
+  "id": "2026-11-12",
+  "data": "2026-11-12",
+  "altura": 178,
+  "protocolo": "jp7",
+  "circunferencias": {
+    "cintura": 86.5,
+    "abdomen": 91,
+    "quadril": 100,
+    "braco_con_d": 37,
+    "pescoco": 39,
+    "torax": 100
+  },
+  "dobras": {
+    "peitoral": 13,
+    "axilar_media": 15,
+    "triceps": 12,
+    "subescapular": 17,
+    "abdominal": 24,
+    "suprailiaca": 19,
+    "coxa": 15
+  },
+  "sinais": {
+    "pa": [
+      {
+        "sis": 124,
+        "dia": 80
+      },
+      {
+        "sis": 120,
+        "dia": 78
+      },
+      {}
+    ],
+    "braco": "esquerdo",
+    "posicao": "sentado",
+    "fc_repouso": 70,
+    "spo2": 98,
+    "fc_oximetro": 71
+  },
+  "postural": {
+    "itens": {
+      "Cabeça anteriorizada": "leve"
+    }
+  },
+  "fotos": {
+    "frente": "fotos/2026-11-12/frente.jpg"
+  },
+  "peso": 87.1,
+  "_t": 1794481160251,
+  "atualizado_em": "2026-11-12T10:59:20",
+  "resultados": {
+    "idade": 36,
+    "imc": 27.5,
+    "imc_classe": "Sobrepeso",
+    "rcq": 0.9,
+    "rcq_risco": "Adequado",
+    "rce": 0.5,
+    "rce_risco": "Adequado",
+    "soma_todas_dobras": 115,
+    "protocolo_nome": "Jackson & Pollock 7 dobras",
+    "soma_dobras": 115,
+    "densidade": 1.0589,
+    "percentual_gordura": 17.5,
+    "gordura_classe": "Média",
+    "massa_gorda": 15.2,
+    "massa_magra": 71.9,
+    "pa_sis": 122,
+    "pa_dia": 79,
+    "pa_media": "122/79",
+    "pa_classe": "Normal",
+    "pam": 93,
+    "spo2_classe": "Normal",
+    "fc_classe": "Normal",
+    "fc_max_estimada": 183
+  }
+}
