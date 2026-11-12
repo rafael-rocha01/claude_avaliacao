@@ -196,3 +196,51 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 .zona-pdf.sobre { border-color: var(--pri); background: var(--pri-claro); }
 .lista-reg .item a { text-decoration: none; }
 .aviso a { color: inherit; }
+
+/* câmera guiada */
+html.cam-aberta, html.cam-aberta body { overflow: hidden; }
+.cam { position: fixed; inset: 0; z-index: 200; background: #000; color: #fff; display: flex; flex-direction: column;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+.cam-topo { display: flex; align-items: center; gap: 10px; padding: 8px 12px; }
+.cam-titulo { flex: 1; text-align: center; display: grid; line-height: 1.2; }
+.cam-titulo small { color: #aaa; font-size: 12px; }
+.cam-btn { background: rgba(255,255,255,.14); color: #fff; border: 0; border-radius: 99px; min-width: 42px; height: 42px; font-size: 18px; padding: 0 12px; }
+.cam-btn.largo { font-size: 16px; padding: 0 22px; min-width: 130px; }
+.cam-btn.primario { background: #14b8a6; color: #04201c; font-weight: 700; }
+.cam-area { flex: 1; min-height: 0; display: grid; place-items: center; container-type: size; padding: 0 8px; }
+.cam-quadro { position: relative; width: min(100cqw, 100cqh * 3 / 4); aspect-ratio: 3 / 4; overflow: hidden; border-radius: 10px; background: #111; }
+.cam-quadro video, .cam-quadro .cam-fantasma, .cam-quadro .cam-previa { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.cam-quadro video.espelho { transform: scaleX(-1); }
+.cam-fantasma { pointer-events: none; mix-blend-mode: screen; }
+.cam-guia, .cam-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.cam-grade line { stroke: rgba(255,255,255,.22); stroke-width: .6; display: none; }
+.cam-guia.com-grade .cam-grade line { display: inline; }
+.cam-limite { stroke: #facc15; stroke-width: 1.2; stroke-dasharray: 6 4; }
+.cam-prumo { stroke: #ff3b6b; stroke-width: 1.4; }
+.cam-txt { fill: #facc15; font-size: 9px; font-family: system-ui, sans-serif; paint-order: stroke; stroke: rgba(0,0,0,.6); stroke-width: 2px; }
+.cam-silhueta ellipse, .cam-silhueta path { fill: rgba(45,212,191,.10); stroke: #2dd4bf; stroke-width: 2; stroke-dasharray: 7 4; vector-effect: non-scaling-stroke; }
+.cam-silhueta .ponto-ref { fill: #ff3b6b; }
+.cam-nivel { position: absolute; right: 8px; top: 8px; display: none; flex-direction: column; align-items: center; gap: 3px; }
+.cam-nivel::before { content: ''; width: 62px; height: 62px; border-radius: 50%; border: 2px solid rgba(255,255,255,.7); background: rgba(0,0,0,.35); }
+.cam-nivel span { position: absolute; top: 22px; width: 18px; height: 18px; border-radius: 50%; background: #f97316; transition: transform .1s; }
+.cam-nivel.ok span { background: #22c55e; }
+.cam-nivel b { font-size: 10px; font-weight: 600; background: rgba(0,0,0,.6); padding: 1px 6px; border-radius: 99px; white-space: nowrap; }
+.cam-nivel.ok b { color: #22c55e; }
+.cam-contagem { position: absolute; inset: 0; display: none; place-items: center; font-size: 120px; font-weight: 800; color: #fff; text-shadow: 0 0 20px #000; }
+.cam-contagem.ver { display: grid; }
+.cam-previa { display: none; }
+.cam-previa.ver { display: block; z-index: 3; }
+.cam-quadro.flash::after { content: ''; position: absolute; inset: 0; background: #fff; z-index: 5; }
+.cam-erro:not(:empty) { position: absolute; inset: 0; z-index: 4; display: grid; place-content: center; text-align: center; padding: 20px; background: #111; font-size: 15px; line-height: 1.5; }
+.cam-erro code { background: #333; color: #fff; }
+.cam-dica { text-align: center; font-size: 13px; color: #ddd; padding: 6px 14px 0; min-height: 2.6em; }
+.cam-controles { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 14px; padding: 6px 10px; font-size: 13px; }
+.cam-controles label { flex-direction: row; align-items: center; gap: 5px; color: #ddd; font-size: 13px; }
+.cam-controles input[type=checkbox] { width: auto; }
+.cam-controles input[type=range] { width: 80px; padding: 0; }
+.cam-controles select { width: auto; padding: 2px 4px; background: #222; color: #fff; border-color: #444; }
+.cam-base { display: flex; align-items: center; justify-content: space-around; padding: 10px 20px 16px; }
+.cam-disparo { width: 72px; height: 72px; border-radius: 50%; background: #fff; border: 5px solid rgba(255,255,255,.35); background-clip: padding-box; }
+.cam-disparo:active { transform: scale(.94); }
+.cam-confirma { display: none; } .cam-confirma.ver { display: flex; }
+.cam:has(.cam-confirma.ver) .cam-base:not(.cam-confirma), .cam:has(.cam-confirma.ver) .cam-controles { display: none; }

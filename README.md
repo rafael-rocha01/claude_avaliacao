@@ -9,7 +9,7 @@ pela pasta de cada aluno.
 |---|---|
 | **Painel** | Últimos indicadores com variação em relação à avaliação anterior, gráficos, alertas (PAR-Q, PA, SpO₂, dor, reavaliação atrasada) |
 | **Anamnese inicial** | Histórico de saúde, medicamentos, lesões, hábitos, objetivos e PAR-Q |
-| **Avaliações** | Peso/estatura · 18 circunferências · 10 dobras · protocolos JP7, JP3, Durnin-Womersley e Faulkner · PA (3 leituras + média) · FC · **oxímetro (SpO₂, FC, PI)** · 4 fotos + extras (câmera do celular) · **checklist postural** (anterior, lateral, posterior, com graus) |
+| **Avaliações** | Peso/estatura · 18 circunferências · 10 dobras · protocolos JP7, JP3, Durnin-Womersley e Faulkner · PA (3 leituras + média) · FC · **oxímetro (SpO₂, FC, PI)** · 4 fotos + extras com **câmera guiada** (silhueta da posição, linha de prumo, nível do celular, foto anterior em transparência, timer) · **checklist postural** (anterior, lateral, posterior, com graus) |
 | **Importar PDF** | Anexa o PDF de avaliação do **Nutrio** (ou outro sistema). O Claude converte para o formato do sistema; a avaliação entra no histórico marcada “revisar”, com os valores do Nutrio guardados para comparação |
 | **Acompanhamento** | Anamnese de acompanhamento a cada encontro: escalas 0–10 (energia, sono, estresse, dor EVA, fome, recuperação), adesão a treino/dieta, sinais rápidos, relato e metas |
 | **Evolução** | Tabela comparativa de todas as avaliações com Δ, e gráficos |
@@ -25,9 +25,23 @@ PA média e classificação (Diretriz Brasileira 2020), PAM, FC máx. estimada (
 Requisito: Python 3.9+ (sem bibliotecas extras).
 
 ```bash
-python3 servidor.py            # abre em http://localhost:8080
-python3 servidor.py --rede     # libera na rede local: abra no celular http://IP-DO-PC:8080 para tirar as fotos
+python3 servidor.py                  # só no computador: http://localhost:8080
+python3 servidor.py --rede --https   # celular/tablet no mesmo Wi-Fi: abra o https://IP:8080 que aparece no terminal
 ```
+
+### Câmera guiada (fotos sempre iguais)
+Na avaliação, **📷 Sessão guiada** abre a câmera com a silhueta da posição e faz as 4 fotos em sequência:
+frente → lateral direita → costas → lateral esquerda.
+- **Silhueta + linhas amarelas**: cabeça abaixo da linha de cima, pés sobre a linha de baixo. Assim a distância e o enquadramento ficam iguais.
+- **Linha vermelha (prumo)**: no meio do corpo na frente/costas; sobre o tornozelo nas laterais.
+- **Foto anterior** do aluno em transparência: alinhe o aluno sobre ela para comparar antes e depois sem distorção.
+- **Nível** (no celular): a bolinha fica verde quando o aparelho está reto. **Timer** de 3/5/10 s para usar com tripé.
+- Dicas: tripé na altura do umbigo do aluno, a ~3 m, fundo liso e mesma luz.
+
+No celular, o navegador só libera a câmera ao vivo em **HTTPS**, por isso o `--https`. Na primeira vez ele avisa que o
+certificado não é confiável (é um certificado gerado no seu computador): toque em *Avançado → Continuar*.
+O `--https` usa o `openssl` (no Windows, vem com o Git for Windows). Sem HTTPS, a câmera guiada oferece a câmera
+comum do celular, sem a silhueta.
 
 ## Como conversa com o Claude
 

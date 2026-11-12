@@ -1,7 +1,7 @@
 # Exemplo João Silva — resumo para análise
 
 > Arquivo gerado automaticamente pela interface a cada salvamento. Não edite à mão.
-> Atualizado em 2026-11-12T11:08:59.
+> Atualizado em 2026-11-12T11:12:41.
 
 ## Cadastro
 - Sexo: M · Nascimento: 1990-05-20 · Altura: 178 cm

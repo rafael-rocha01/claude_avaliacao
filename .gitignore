@@ -6,3 +6,4 @@ clientes/*
 __pycache__/
 *.tmp
 .DS_Store
+.certificado/

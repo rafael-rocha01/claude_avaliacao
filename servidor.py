@@ -597,19 +597,67 @@ class Handler(SimpleHTTPRequestHandler):
             return self._erro(str(e))
 
 
+def ip_local():
+    """IP deste computador na rede local (para abrir no celular)."""
+    import socket
+    sk = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sk.connect(("10.255.255.255", 1))
+        return sk.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
+    finally:
+        sk.close()
+
+
+def preparar_certificado(ip: str):
+    """Certificado autoassinado em .certificado/ (o celular só libera a câmera ao vivo em HTTPS)."""
+    import subprocess
+    pasta = RAIZ / ".certificado"
+    cert, chave = pasta / "cert.pem", pasta / "chave.pem"
+    marca = pasta / "ip.txt"
+    if cert.exists() and chave.exists() and marca.exists() and marca.read_text().strip() == ip:
+        return cert, chave
+    if not shutil.which("openssl"):
+        sys.exit("Para --https é preciso o 'openssl' instalado (no Windows ele vem com o Git for Windows),\n"
+                 f"ou coloque um certificado próprio em {cert} e {chave}.")
+    pasta.mkdir(exist_ok=True)
+    subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-sha256", "-days", "825",
+                    "-keyout", str(chave), "-out", str(cert), "-subj", "/CN=avaliacao-fisica-local",
+                    "-addext", f"subjectAltName=DNS:localhost,IP:127.0.0.1,IP:{ip}"],
+                   check=True, capture_output=True)
+    marca.write_text(ip)
+    return cert, chave
+
+
 def main():
     ap = argparse.ArgumentParser(description="Servidor da avaliação física")
     ap.add_argument("--porta", type=int, default=8080)
     ap.add_argument("--rede", action="store_true", help="aceitar conexões da rede local (celular/tablet)")
+    ap.add_argument("--https", action="store_true",
+                    help="HTTPS com certificado local (necessário para a câmera guiada no celular)")
     a = ap.parse_args()
     CLIENTES.mkdir(exist_ok=True)
     for d in CLIENTES.glob("*/cliente.json"):
         gerar_resumo(d.parent.name)
     host = "0.0.0.0" if a.rede else "127.0.0.1"
     srv = ThreadingHTTPServer((host, a.porta), Handler)
-    print(f"Avaliação Física rodando em http://localhost:{a.porta}")
+    esquema = "http"
+    ip = ip_local()
+    if a.https:
+        import ssl
+        cert, chave = preparar_certificado(ip)
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ctx.load_cert_chain(str(cert), str(chave))
+        srv.socket = ctx.wrap_socket(srv.socket, server_side=True)
+        esquema = "https"
+    print(f"Avaliação Física rodando em {esquema}://localhost:{a.porta}")
     if a.rede:
-        print("Modo rede: acesse pelo celular usando o IP deste computador, ex.: http://192.168.0.10:%d" % a.porta)
+        print(f"No celular/tablet (mesmo Wi-Fi): {esquema}://{ip}:{a.porta}")
+        if a.https:
+            print("  O navegador vai avisar que o certificado não é confiável: toque em 'Avançado' > 'Continuar'.")
+        else:
+            print("  Dica: use também --https para liberar a câmera guiada (silhueta) no celular.")
     print(f"Dados em: {CLIENTES}")
     try:
         srv.serve_forever()

@@ -412,8 +412,11 @@ function editorAvaliacao(el) {
       <p class="dica">Diretriz: 2–3 leituras com 1–2 min de intervalo, após 5 min sentado, costas apoiadas, braço na altura do coração. A média é usada na classificação.</p>
     </div>
     <div class="card"><h3>Fotos <small>fundo neutro, mesma distância e altura da câmera, roupa de banho/top</small></h3>
+      <div class="barra-acoes" style="justify-content:flex-start;margin:0 0 12px"><button type="button" class="primario" id="btnSessaoFotos">📷 Sessão guiada (4 fotos)</button></div>
       <div class="fotos-grade" id="gradeFotos"></div>
-      <p class="dica">No celular, “Câmera” abre a câmera direto. Clique na foto para ver com grade postural e linha de prumo.</p></div>
+      <p class="dica">A câmera guiada mostra a silhueta da posição, a linha de prumo, o nível do celular e a foto anterior do aluno em transparência,
+        para repetir sempre o mesmo enquadramento. Câmera no tripé ou apoiada na altura do umbigo do aluno, a ~3 m.
+        Clique numa foto para vê-la com grade postural.</p></div>
     <div class="card"><h3>Avaliação postural <small>marque apenas o que estiver alterado</small></h3>
       <div class="postural">${Object.entries(POSTURAL).map(([vista, itens]) => `<fieldset><legend>${vista}</legend>
         ${itens.map(it => `<div class="item-post"><span>${it}</span><select data-k="postural.itens.${it.replace(/\./g, '')}">${GRAUS.map(g => `<option value="${g}">${g}</option>`).join('')}</select></div>`).join('')}
@@ -437,6 +440,7 @@ function editorAvaliacao(el) {
   ligar(el, A, () => { A._sujo = true; atualizar(); });
   atualizar();
   renderSlotsFoto();
+  $('#btnSessaoFotos').onclick = () => abrirCamera();
   $('#cancAv').onclick = () => { if (A._sujo && !confirm('Descartar alterações?')) return; S.rascunho = null; renderAluno(); };
   $('#salvarAv').onclick = () => { A.revisar = false; salvarAvaliacao(); };
   $('#salvarFb').onclick = async () => { A.revisar = false; if (await salvarAvaliacao(true)) { S.aba = 'feedback'; renderAluno(); $('#tipoPedido').value = 'avaliacao'; $('#refPedido').value = A.id; } };
@@ -489,7 +493,7 @@ function renderSlotsFoto() {
     const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; if (cam) i.capture = 'environment';
     i.onchange = () => i.files[0] && enviarFoto(pos, i.files[0]); i.click();
   };
-  $$('[data-cam]', g).forEach(b => b.onclick = () => escolher(b.dataset.cam, true));
+  $$('[data-cam]', g).forEach(b => b.onclick = () => abrirCamera(b.dataset.cam));
   $$('[data-arq]', g).forEach(b => b.onclick = () => escolher(b.dataset.arq, false));
   $$('[data-rm]', g).forEach(b => b.onclick = async () => {
     if (!confirm('Remover esta foto?')) return;
@@ -498,6 +502,36 @@ function renderSlotsFoto() {
   });
   $$('[data-ver]', g).forEach(img => img.onclick = () => verFotos([{ src: img.src, legenda: fmtData(A.data) }], img.alt));
   $('#addExtra').onclick = () => { let i = 1; while (A.fotos['extra-' + i]) i++; escolher('extra-' + i, false); };
+}
+const ORDEM_SESSAO = ['frente', 'lateral-direita', 'costas', 'lateral-esquerda'];
+/* foto mais recente da mesma posição em outra avaliação, para o "fantasma" de alinhamento */
+function fantasmas(A) {
+  const out = {};
+  const outras = avaliacoesOrd().filter(a => a.id !== A.id && a.fotos).sort((a, b) =>
+    (a.data <= A.data) === (b.data <= A.data) ? b.data.localeCompare(a.data) : (a.data <= A.data ? -1 : 1));
+  for (const pos of ORDEM_SESSAO) {
+    const a = outras.find(x => x.fotos[pos]);
+    if (a) out[pos] = `/clientes/${S.slug}/${a.fotos[pos]}`;
+  }
+  return out;
+}
+function abrirCamera(inicio) {
+  const A = S.rascunho;
+  Camera.abrir({
+    posicoes: inicio && inicio.startsWith('extra-') ? [inicio] : ORDEM_SESSAO,
+    inicio: inicio || ORDEM_SESSAO.find(p => !A.fotos[p]) || 'frente',
+    fantasmas: fantasmas(A),
+    aoCapturar: (pos, dataURL) => gravarFoto(pos, dataURL),
+    aoFechar: () => renderSlotsFoto(),
+  });
+}
+async function gravarFoto(pos, dataURL) {
+  const A = S.rascunho;
+  const r = await api('POST', `clientes/${S.slug}/fotos/${A.id}/${pos}/imagem`, { base64: dataURL });
+  A.fotos[pos] = r.caminho; A._t = Date.now();
+  await salvarAvaliacao(true);
+  if ($('#gradeFotos')) renderSlotsFoto();
+  toast('Foto salva: ' + ((POSICOES_FOTO.find(x => x[0] === pos) || [, pos])[1]));
 }
 function redimensionar(arquivo, max = 1600) {
   return new Promise((ok, erro) => {
@@ -515,11 +549,7 @@ async function enviarFoto(pos, arquivo) {
   const A = S.rascunho;
   try {
     toast('Enviando foto…');
-    const b64 = await redimensionar(arquivo);
-    const r = await api('POST', `clientes/${S.slug}/fotos/${A.id}/${pos}/imagem`, { base64: b64 });
-    A.fotos[pos] = r.caminho; A._t = Date.now();
-    await salvarAvaliacao(true);
-    renderSlotsFoto();
+    await gravarFoto(pos, await redimensionar(arquivo));
   } catch (e) { toast('Erro na foto: ' + e.message); }
 }
 function verFotos(lista, titulo) {
