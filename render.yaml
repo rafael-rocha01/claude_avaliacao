@@ -1,0 +1,24 @@
+# Publicação no Render (render.com) via "New > Blueprint" apontando para este repositório.
+services:
+  - type: web
+    name: avaliacao-fisica
+    runtime: docker
+    plan: starter            # disco persistente exige plano pago (Starter)
+    region: virginia         # região mais próxima do Brasil disponível no Render
+    healthCheckPath: /saude
+    autoDeploy: true
+    disk:
+      name: dados
+      mountPath: /data
+      sizeGB: 5
+    envVars:
+      - key: DATA_DIR
+        value: /data
+      - key: AVALIACAO_USUARIO
+        sync: false          # o Render pede o valor na criação
+      - key: AVALIACAO_SENHA
+        sync: false          # mínimo 10 caracteres
+      - key: AVALIACAO_SEGREDO
+        generateValue: true  # chave da sessão, gerada automaticamente
+      - key: ANTHROPIC_API_KEY
+        sync: false          # opcional: feedback e conversão de PDF pelo botão

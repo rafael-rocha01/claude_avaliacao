@@ -6,6 +6,15 @@ Uso:
     python3 servidor.py                 # http://localhost:8080 (só neste computador)
     python3 servidor.py --rede          # libera na rede local (tirar fotos pelo celular)
     python3 servidor.py --porta 9000
+    python3 servidor.py --rede --senha minhasenha   # exige login na rede local
+
+Modo online (nuvem): defina as variáveis de ambiente
+    PORT                porta (a hospedagem define sozinha)
+    DATA_DIR            pasta persistente onde ficam clientes/ (ex.: /data)
+    AVALIACAO_USUARIO   usuário do login (padrão: admin)
+    AVALIACAO_SENHA     senha do login (OBRIGATÓRIA quando PORT está definida)
+    AVALIACAO_SEGREDO   chave para assinar a sessão (qualquer texto longo e aleatório)
+    ANTHROPIC_API_KEY   para os botões de feedback e conversão de PDF pela API
 
 Tudo é salvo em ./clientes/<slug-do-aluno>/ em arquivos JSON, Markdown e JPG,
 para que o Claude Code (aberto nesta pasta) leia os dados e escreva feedbacks.
@@ -15,6 +24,14 @@ necessário para o botão "Gerar feedback agora" dentro da interface.
 import argparse
 import base64
 import datetime as dt
+import hashlib
+import hmac
+import io
+import secrets
+import tempfile
+import threading
+import time
+import zipfile
 import json
 import mimetypes
 import os
@@ -29,7 +46,56 @@ from urllib.parse import unquote, urlparse
 
 RAIZ = Path(__file__).resolve().parent
 WEB = RAIZ / "web"
-CLIENTES = RAIZ / "clientes"
+DADOS = Path(os.environ.get("DATA_DIR") or RAIZ).resolve()
+CLIENTES = DADOS / "clientes"
+LIXEIRA = DADOS / ".lixeira"
+EXTENSOES_BACKUP = {".json", ".md", ".jpg", ".jpeg", ".png", ".pdf"}
+
+# ---- login (ativo quando há senha definida)
+USUARIO = os.environ.get("AVALIACAO_USUARIO", "admin")
+SENHA = os.environ.get("AVALIACAO_SENHA", "")
+SEGREDO = (os.environ.get("AVALIACAO_SEGREDO") or secrets.token_hex(32)).encode()
+SESSAO_DIAS = 30
+_tentativas = {}
+_trava = threading.Lock()
+
+
+def auth_ativo() -> bool:
+    return bool(SENHA)
+
+
+def criar_token(usuario: str) -> str:
+    exp = int(time.time()) + SESSAO_DIAS * 86400
+    msg = f"{usuario}|{exp}".encode()
+    assinatura = hmac.new(SEGREDO, msg, hashlib.sha256).hexdigest()
+    return base64.urlsafe_b64encode(msg).decode() + "." + assinatura
+
+
+def token_valido(token: str) -> bool:
+    try:
+        b64, assinatura = token.split(".", 1)
+        msg = base64.urlsafe_b64decode(b64.encode())
+        esperado = hmac.new(SEGREDO, msg, hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(assinatura, esperado):
+            return False
+        usuario, exp = msg.decode().split("|")
+        return usuario == USUARIO and int(exp) > time.time()
+    except (ValueError, UnicodeDecodeError):
+        return False
+
+
+def pode_tentar_login(ip: str) -> bool:
+    """No máximo 10 tentativas erradas a cada 15 minutos por IP."""
+    agora_s = time.time()
+    with _trava:
+        lista = [t for t in _tentativas.get(ip, []) if agora_s - t < 900]
+        _tentativas[ip] = lista
+        return len(lista) < 10
+
+
+def registrar_falha(ip: str):
+    with _trava:
+        _tentativas.setdefault(ip, []).append(time.time())
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,80}$")
 ID_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}(-[0-9]{1,3})?$")
 FOTO_RE = re.compile(r"^(frente|costas|lateral-direita|lateral-esquerda|extra-[0-9]{1,2})$")
@@ -370,12 +436,107 @@ def converter_pdf_api(slug: str, arquivo: str):
     return ident, None
 
 
+# ------------------------------------------------------------------- backup
+def gerar_backup(slug=None) -> Path:
+    """Zip com clientes/<slug>/... (todos ou um aluno). Retorna o caminho de um arquivo temporário."""
+    tmp = tempfile.NamedTemporaryFile(prefix="backup-", suffix=".zip", delete=False)
+    tmp.close()
+    pastas = [pasta_cliente(slug)] if slug else sorted(d.parent for d in CLIENTES.glob("*/cliente.json"))
+    with zipfile.ZipFile(tmp.name, "w", zipfile.ZIP_DEFLATED) as z:
+        for pasta in pastas:
+            for f in sorted(pasta.rglob("*")):
+                if f.is_file() and f.suffix.lower() in EXTENSOES_BACKUP:
+                    z.write(f, f.relative_to(CLIENTES).as_posix())
+    return Path(tmp.name)
+
+
+def importar_backup(caminho_zip: Path):
+    """Mescla um backup: arquivos novos entram; existentes só são trocados se o do zip for mais recente."""
+    novos = atualizados = ignorados = 0
+    alunos = set()
+    with zipfile.ZipFile(caminho_zip) as z:
+        for info in z.infolist():
+            if info.is_dir():
+                continue
+            nome = info.filename.replace("\\", "/")
+            if nome.startswith("clientes/"):
+                nome = nome[len("clientes/"):]
+            partes = nome.split("/")
+            if (len(partes) < 2 or not SLUG_RE.match(partes[0]) or any(x in ("", ".", "..") for x in partes)
+                    or Path(nome).suffix.lower() not in EXTENSOES_BACKUP or info.file_size > 50 * 1024 * 1024):
+                ignorados += 1
+                continue
+            destino = (CLIENTES / nome).resolve()
+            if not str(destino).startswith(str(CLIENTES.resolve()) + os.sep):
+                ignorados += 1
+                continue
+            data_zip = dt.datetime(*info.date_time).timestamp()
+            if destino.exists():
+                if destino.stat().st_mtime >= data_zip - 2:
+                    ignorados += 1
+                    continue
+                atualizados += 1
+            else:
+                novos += 1
+            destino.parent.mkdir(parents=True, exist_ok=True)
+            with z.open(info) as origem, open(destino, "wb") as saida:
+                shutil.copyfileobj(origem, saida)
+            os.utime(destino, (data_zip, data_zip))
+            alunos.add(partes[0])
+    for slug in alunos:
+        if (CLIENTES / slug / "cliente.json").exists():
+            gerar_resumo(slug)
+    return {"novos": novos, "atualizados": atualizados, "ignorados": ignorados, "alunos": sorted(alunos)}
+
+
 # ------------------------------------------------------------------- HTTP
 class Handler(SimpleHTTPRequestHandler):
     server_version = "AvaliacaoFisica/1.0"
 
     def log_message(self, fmt, *args):
         sys.stderr.write("[%s] %s\n" % (self.log_date_time_string(), fmt % args))
+
+    def end_headers(self):
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "same-origin")
+        if self._https():
+            self.send_header("Strict-Transport-Security", "max-age=31536000")
+        super().end_headers()
+
+    # ---- login
+    def _https(self):
+        import ssl
+        if isinstance(getattr(self, "connection", None), ssl.SSLSocket):
+            return True
+        h = getattr(self, "headers", None)
+        return bool(h) and h.get("X-Forwarded-Proto", "") == "https"
+
+    def _ip(self):
+        # atrás do proxy da hospedagem, o IP real vem em X-Forwarded-For; localmente, não confiar nesse cabeçalho
+        if os.environ.get("PORT") and self.headers.get("X-Forwarded-For"):
+            return self.headers["X-Forwarded-For"].split(",")[0].strip()
+        return self.client_address[0]
+
+    def _autenticado(self):
+        if not auth_ativo():
+            return True
+        for parte in (self.headers.get("Cookie") or "").split(";"):
+            k, _, v = parte.strip().partition("=")
+            if k == "sessao" and token_valido(v):
+                return True
+        return False
+
+    def _cookie(self, valor, idade):
+        seguro = "; Secure" if self._https() else ""
+        return f"sessao={valor}; Path=/; HttpOnly; SameSite=Strict; Max-Age={idade}{seguro}"
+
+    def _origem_ok(self):
+        """Bloqueia requisições de outros sites (CSRF) quando o navegador informa a origem."""
+        origem = self.headers.get("Origin")
+        if not origem:
+            return True
+        return urlparse(origem).netloc == self.headers.get("Host")
 
     # ---- respostas
     def _json(self, dados, status=200):
@@ -414,7 +575,25 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         url = urlparse(self.path)
         partes = [unquote(x) for x in url.path.strip("/").split("/") if x]
+        if partes == ["saude"]:
+            corpo = b"ok"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Content-Length", "2")
+            self.end_headers()
+            return self.wfile.write(corpo)
+        if partes in (["login"], ["login.html"]):
+            return self._arquivo(WEB / "login.html")
+        if not self._autenticado():
+            if partes[:1] == ["api"]:
+                return self._erro("faça login", 401)
+            self.send_response(302)
+            self.send_header("Location", "/login")
+            self.send_header("Content-Length", "0")
+            return self.end_headers()
         try:
+            if partes == ["api", "backup"] or (len(partes) == 3 and partes[:2] == ["api", "backup"]):
+                return self._enviar_backup(partes[2] if len(partes) == 3 else None)
             if not partes:
                 return self._arquivo(WEB / "index.html")
             if partes[0] == "api":
@@ -455,8 +634,65 @@ class Handler(SimpleHTTPRequestHandler):
             except ImportError:
                 sdk = False
             return self._json({"sdk": sdk, "chave": bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")),
-                               "pasta": str(CLIENTES)})
+                               "pasta": str(CLIENTES), "auth": auth_ativo(), "usuario": USUARIO if auth_ativo() else None,
+                               "online": bool(os.environ.get("PORT"))})
         return self._erro("rota desconhecida", 404)
+
+    def _enviar_backup(self, slug):
+        if slug and not (CLIENTES / slug / "cliente.json").exists():
+            return self._erro("aluno não encontrado", 404)
+        arq = gerar_backup(slug)
+        try:
+            nome = f"backup-{slug or 'todos'}-{dt.datetime.now():%Y-%m-%d-%H%M}.zip"
+            self.send_response(200)
+            self.send_header("Content-Type", "application/zip")
+            self.send_header("Content-Disposition", f'attachment; filename="{nome}"')
+            self.send_header("Content-Length", str(arq.stat().st_size))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            with open(arq, "rb") as f:
+                shutil.copyfileobj(f, self.wfile)
+        finally:
+            arq.unlink(missing_ok=True)
+
+    def _receber_backup(self):
+        n = int(self.headers.get("Content-Length") or 0)
+        if n <= 0 or n > 2 * 1024 ** 3:
+            return self._erro("arquivo vazio ou grande demais (máx. 2 GB)")
+        tmp = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
+        try:
+            restante = n
+            while restante:
+                bloco = self.rfile.read(min(restante, 1024 * 1024))
+                if not bloco:
+                    break
+                tmp.write(bloco)
+                restante -= len(bloco)
+            tmp.close()
+            if not zipfile.is_zipfile(tmp.name):
+                return self._erro("o arquivo não é um .zip de backup")
+            return self._json(importar_backup(Path(tmp.name)))
+        finally:
+            Path(tmp.name).unlink(missing_ok=True)
+
+    def _login(self):
+        ip = self._ip()
+        if not pode_tentar_login(ip):
+            return self._erro("muitas tentativas; aguarde 15 minutos", 429)
+        corpo = self._corpo()
+        ok = (hmac.compare_digest(str(corpo.get("usuario", "")), USUARIO)
+              & hmac.compare_digest(str(corpo.get("senha", "")), SENHA))
+        if not (auth_ativo() and ok):
+            registrar_falha(ip)
+            time.sleep(1)
+            return self._erro("usuário ou senha incorretos", 401)
+        corpo_r = b'{"ok": true}'
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Set-Cookie", self._cookie(criar_token(USUARIO), SESSAO_DIAS * 86400))
+        self.send_header("Content-Length", str(len(corpo_r)))
+        self.end_headers()
+        self.wfile.write(corpo_r)
 
     def do_POST(self):
         self._mutacao("POST")
@@ -469,6 +705,25 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _mutacao(self, metodo):
         partes = [unquote(x) for x in urlparse(self.path).path.strip("/").split("/") if x]
+        if not self._origem_ok():
+            return self._erro("origem não permitida", 403)
+        if partes == ["api", "login"] and metodo == "POST":
+            try:
+                return self._login()
+            except (ValueError, json.JSONDecodeError):
+                return self._erro("requisição inválida")
+        if partes == ["api", "logout"] and metodo == "POST":
+            self.send_response(200)
+            self.send_header("Set-Cookie", self._cookie("", 0))
+            self.send_header("Content-Length", "0")
+            return self.end_headers()
+        if not self._autenticado():
+            return self._erro("faça login", 401)
+        if partes == ["api", "backup"] and metodo == "POST":
+            try:
+                return self._receber_backup()
+            except (zipfile.BadZipFile, OSError) as e:
+                return self._erro(f"backup inválido: {e}")
         try:
             corpo = self._corpo() if metodo != "DELETE" else {}
             if partes[:1] != ["api"]:
@@ -498,8 +753,8 @@ class Handler(SimpleHTTPRequestHandler):
             resto = p[2:]
 
             if resto == [] and metodo == "DELETE":
-                lixeira = RAIZ / ".lixeira"
-                lixeira.mkdir(exist_ok=True)
+                lixeira = LIXEIRA
+                lixeira.mkdir(parents=True, exist_ok=True)
                 shutil.move(str(pasta), str(lixeira / f"{slug}-{dt.datetime.now():%Y%m%d%H%M%S}"))
                 return self._json({"ok": True})
             if resto == ["cliente"] and metodo == "PUT":
@@ -636,8 +891,22 @@ def main():
     ap.add_argument("--rede", action="store_true", help="aceitar conexões da rede local (celular/tablet)")
     ap.add_argument("--https", action="store_true",
                     help="HTTPS com certificado local (necessário para a câmera guiada no celular)")
+    ap.add_argument("--senha", help="exige login com esta senha (usuário: AVALIACAO_USUARIO ou 'admin')")
     a = ap.parse_args()
-    CLIENTES.mkdir(exist_ok=True)
+    global SENHA
+    if a.senha:
+        SENHA = a.senha
+    online = bool(os.environ.get("PORT"))
+    if online:
+        a.porta, a.rede = int(os.environ["PORT"]), True
+        if not SENHA:
+            sys.exit("ERRO: no modo online defina AVALIACAO_SENHA (os dados dos alunos não podem ficar sem login).")
+        if len(SENHA) < 10:
+            sys.exit("ERRO: AVALIACAO_SENHA precisa ter pelo menos 10 caracteres.")
+    CLIENTES.mkdir(parents=True, exist_ok=True)
+    exemplo = RAIZ / "clientes" / "exemplo-joao-silva"
+    if CLIENTES != (RAIZ / "clientes").resolve() and not any(CLIENTES.iterdir()) and exemplo.exists():
+        shutil.copytree(exemplo, CLIENTES / exemplo.name)  # primeiro uso na nuvem: aluno de exemplo para testar
     for d in CLIENTES.glob("*/cliente.json"):
         gerar_resumo(d.parent.name)
     host = "0.0.0.0" if a.rede else "127.0.0.1"
@@ -652,13 +921,16 @@ def main():
         srv.socket = ctx.wrap_socket(srv.socket, server_side=True)
         esquema = "https"
     print(f"Avaliação Física rodando em {esquema}://localhost:{a.porta}")
-    if a.rede:
+    if online:
+        print("Modo online: o HTTPS e o endereço público são fornecidos pela hospedagem.")
+    elif a.rede:
         print(f"No celular/tablet (mesmo Wi-Fi): {esquema}://{ip}:{a.porta}")
         if a.https:
             print("  O navegador vai avisar que o certificado não é confiável: toque em 'Avançado' > 'Continuar'.")
         else:
             print("  Dica: use também --https para liberar a câmera guiada (silhueta) no celular.")
     print(f"Dados em: {CLIENTES}")
+    print(f"Login: {'ATIVO (usuário ' + USUARIO + ')' if auth_ativo() else 'desligado (só use assim no seu computador/Wi-Fi de confiança)'}")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

@@ -1,0 +1,3 @@
+# Só necessário para os botões "Gerar agora" / "Converter agora" (API do Claude).
+# O sistema roda sem nenhuma dependência além do Python.
+anthropic>=2.8,<3

@@ -244,3 +244,10 @@ html.cam-aberta, html.cam-aberta body { overflow: hidden; }
 .cam-disparo:active { transform: scale(.94); }
 .cam-confirma { display: none; } .cam-confirma.ver { display: flex; }
 .cam:has(.cam-confirma.ver) .cam-base:not(.cam-confirma), .cam:has(.cam-confirma.ver) .cam-controles { display: none; }
+
+/* rodapé da barra lateral (backup / sair) */
+.lista-alunos { flex: 1; }
+.rodape-lateral { display: grid; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--borda); }
+.rodape-lateral button { width: 100%; font-size: 13px; }
+.cab-aluno .acoes a { text-decoration: none; }
+.rodape-lateral a { color: inherit; text-decoration: none; }

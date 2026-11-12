@@ -20,6 +20,12 @@ Cálculos automáticos: IMC, % de gordura (densidade + Siri), massa gorda/magra,
 PA média e classificação (Diretriz Brasileira 2020), PAM, FC máx. estimada (Tanaka), classificação de SpO₂.
 “Imprimir relatório” gera o PDF do painel pelo navegador.
 
+## Duas formas de usar
+
+- **Local** (seu computador, grátis, integração direta com o Claude Code) — veja abaixo.
+- **Online** (qualquer lugar, com login e HTTPS) — passo a passo em **[PUBLICAR.md](PUBLICAR.md)**.
+- Os dois conversam por **backup .zip** (barra lateral: ⭳ Baixar / ⭱ Importar).
+
 ## Como rodar
 
 Requisito: Python 3.9+ (sem bibliotecas extras).
@@ -27,6 +33,7 @@ Requisito: Python 3.9+ (sem bibliotecas extras).
 ```bash
 python3 servidor.py                  # só no computador: http://localhost:8080
 python3 servidor.py --rede --https   # celular/tablet no mesmo Wi-Fi: abra o https://IP:8080 que aparece no terminal
+python3 servidor.py --rede --https --senha minha-senha-forte   # idem, exigindo login
 ```
 
 ### Câmera guiada (fotos sempre iguais)
@@ -80,7 +87,8 @@ Na API, o resumo e as fotos são enviados à Anthropic; com o Claude Code, ele l
 ## Estrutura
 
 ```
-servidor.py              servidor HTTP + gravação em disco + RESUMO.md + chamada opcional à API
+servidor.py              servidor HTTP + login + backup + gravação em disco + RESUMO.md + API opcional
+Dockerfile, render.yaml  publicação online (ver PUBLICAR.md)
 web/                     interface (HTML/CSS/JS puro)
   calculos.js            fórmulas e classificações
 CLAUDE.md                instruções para o Claude (estrutura, formato do feedback, limites)

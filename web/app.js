@@ -80,6 +80,7 @@ async function api(metodo, caminho, corpo) {
     method: metodo, headers: corpo ? { 'Content-Type': 'application/json' } : {},
     body: corpo ? JSON.stringify(corpo) : undefined,
   });
+  if (r.status === 401 && caminho !== 'login') { location.href = '/login'; throw new Error('sessão expirada'); }
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.erro || r.statusText);
   return j;
@@ -194,6 +195,7 @@ function renderAluno() {
       <div class="acoes">
         <button id="btnEditarAluno">Editar cadastro</button>
         <button id="btnImprimir">Imprimir relatório</button>
+        <a href="/api/backup/${esc(c.slug)}" download><button type="button" title="Baixa a pasta do aluno (.zip) para usar no Claude Code do computador">Baixar pasta (.zip)</button></a>
         <button id="btnExcluirAluno" class="perigo">Excluir</button>
       </div>
     </div>
@@ -860,7 +862,27 @@ window.addEventListener('focus', async () => {
 
 (async () => {
   try { S.status = await api('GET', 'status'); } catch { S.status = {}; }
-  $('#statusClaude').textContent = S.status.sdk && S.status.chave ? '● Claude API conectada' : '● Claude Code via pasta do aluno';
+  $('#statusClaude').textContent = (S.status.online ? 'Online · ' : 'Local · ') +
+    (S.status.sdk && S.status.chave ? 'Claude API conectada' : 'Claude Code via pasta do aluno');
+  $('#rodapeLateral').innerHTML = `
+    <a href="/api/backup" download><button type="button" title="Todos os alunos em um .zip">⭳ Baixar backup</button></a>
+    <button type="button" id="btnImportarBackup" title="Mescla um .zip de backup (do computador ou do online)">⭱ Importar backup</button>
+    ${S.status.auth ? `<button type="button" id="btnSair">Sair (${esc(S.status.usuario)})</button>` : ''}`;
+  $('#btnImportarBackup').onclick = () => {
+    const i = document.createElement('input'); i.type = 'file'; i.accept = '.zip,application/zip';
+    i.onchange = async () => {
+      const f = i.files[0]; if (!f) return;
+      if (!confirm(`Importar ${f.name}? Arquivos novos entram; os existentes só são trocados se o do backup for mais recente.`)) return;
+      toast('Importando backup…', 10000);
+      const r = await fetch('/api/backup', { method: 'POST', headers: { 'Content-Type': 'application/zip' }, body: f });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) return toast('Erro: ' + (j.erro || r.statusText), 6000);
+      toast(`Backup importado: ${j.novos} novos, ${j.atualizados} atualizados, ${j.ignorados} sem mudança.`, 6000);
+      await carregarAlunos(); if (S.slug) await abrirAluno(S.slug);
+    };
+    i.click();
+  };
+  if ($('#btnSair')) $('#btnSair').onclick = async () => { await fetch('/api/logout', { method: 'POST' }); location.href = '/login'; };
   await carregarAlunos();
   const [slug, aba] = location.hash.slice(1).split('/');
   if (slug && S.alunos.some(a => a.slug === slug)) abrirAluno(slug, ABAS.some(x => x[0] === aba) ? aba : 'painel');

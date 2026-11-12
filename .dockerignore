@@ -1,0 +1,6 @@
+.git
+.certificado
+.lixeira
+__pycache__
+clientes/*
+!clientes/exemplo-joao-silva
